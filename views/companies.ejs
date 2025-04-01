@@ -1,0 +1,56 @@
+
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>企業一覧</title>
+    <link rel="stylesheet" href="/css/style.css">
+    <script src="/send_url.js"></script>
+</head>
+<body>
+    <%- include('header'); %>
+    <h1>登録企業一覧</h1>
+    
+    <% if (companies.length > 0) { %>
+        <ul>
+            <% companies.forEach(company => { %>
+                <li>
+                    <a href="/company/<%= company.id %>"><%= company.name %></a>
+                    <!-- 企業削除ボタン -->
+                    <button onclick="confirmDelete('<%= company.id %>', '<%= company.name %>')">削除</button>
+                </li>
+            <% }); %>
+        </ul>
+    <% } else { %>
+        <p>登録されている企業はありません。</p>
+    <% } %>
+    
+    <form action="/companies/add" method="POST">
+        <input type="text" name="company_name" placeholder="企業名を追加">
+        <button type="submit">追加</button>
+    </form>
+</body>
+
+<script>
+    function confirmDelete(companyId, companyName) {
+        if (confirm(`本当に「${companyName}」を削除しますか？\nこの操作は元に戻せません。`)) {
+            // 確認後、削除処理を実行
+            fetch(`/companies/delete/${companyId}`, {
+                method: 'POST'
+            }).then(response => {
+                if (response.ok) {
+                    alert("削除が完了しました");
+                    location.reload();  // ページをリロードして一覧を更新
+                } else {
+                    alert("削除に失敗しました");
+                }
+            }).catch(error => {
+                console.error("削除エラー:", error);
+                alert("エラーが発生しました");
+            });
+        }
+    }
+    </script>
+    
+</html>

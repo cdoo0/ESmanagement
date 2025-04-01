@@ -1,0 +1,60 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8">
+    <title>LIST APP +</title>
+    <link rel="stylesheet" href="/css/style.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css">
+</head>
+<body>
+    <header>
+        <a href="/" class="header-logo">LIST APP +</a>
+    </header>
+    <div class="container">
+        <div class="container-header">
+            <h1>買い物リスト</h1>
+            <a href="/new" class="new-button">+ 新規登録</a>
+        </div>
+        <form action="/index" method="GET">
+            <input type="text" name="q" placeholder="検索" value="<%= searchQuery %>">
+            <button type="submit">
+                <i class="fa-solid fa-magnifying-glass"></i>
+            </button>
+        </form>
+        <div class="sort-links">
+            <a href="/index?order=name">名前順</a>
+            <a href="/index?order=date">日付順</a>
+        </div>
+        <div class="index-table-wrapper">
+            <div class="table-head">
+                <!-- <span class="id-column">ID</span> -->
+                <span class="item-column">買うもの</span>
+                <span class="category-column">カテゴリ</span>
+                <!-- <span class="check-column">完了</span> -->
+            </div>
+            <ul class="table-body">
+                <% items.forEach((item) => { %>
+                    <li>
+                        <div class="item-data">
+                            <!-- <span class="id-column"><%= item.id %></span> -->
+                            <span class="name-column"><%= item.name %></span>
+                            <span class="category-column"><%= item.category_name || '未分類' %></span>
+                        </div>
+                        <div class="item-menu">
+                            <form action="/delete/<%= item.id %>" method="post">
+                                <input type="submit" value="削除">
+                            </form>
+                            <form action="/update" method="POST">
+                                <input type="hidden" name="id" value="<%= item.id %>">
+                                <input type="checkbox" name="completed" value="true"
+                                       onchange="this.form.submit()" <%= item.completed ? 'checked' : '' %>>
+                            </form>
+                            <a href="/edit/<%= item.id %>">編集</a>
+                        </div>
+                    </li>
+                <% }) %>
+            </ul>
+        </div>
+    </div>
+</body>
+</html>

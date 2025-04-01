@@ -1,0 +1,162 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+    <meta charset="utf-8">
+    <title>
+        <%= company.name %> の質問一覧
+    </title>
+    <link rel="stylesheet" href="/css/style.css">
+    <script src="/send_url.js"></script>
+</head>
+
+<body>
+    <%- include('header'); %>
+        <h1>
+            <%= company.name %> の質問一覧
+        </h1>
+        <ul>
+            <% questions.forEach(question=> { %>
+                <li>
+                    <strong>
+                        <%= question.question_text %>
+                    </strong> カテゴリ: <%= question.category_name %>
+                        <br>
+
+                        <!-- 編集・削除ボタン -->
+                        <button onclick="toggleEditForm('<%= question.question_id %>')">編集</button>
+
+                        <form action="/questions/delete/<%= question.question_id %>" method="POST"
+                            style="display:inline;">
+                            <input type="hidden" name="company_id" value="<%= company.id %>">
+                            <button type="submit" onclick="return confirm('本当に削除しますか？')">削除</button>
+                        </form>
+
+                        <!-- 編集フォーム（最初は非表示） -->
+                        <form id="editForm-<%= question.question_id %>"
+                            action="/questions/edit/<%= question.question_id %>" method="POST"
+                            style="display:none; margin-top:10px;">
+                            <input type="hidden" name="company_id" value="<%= company.id %>">
+
+                            <label>質問内容: <input type="text" name="question_text" value="<%= question.question_text %>"
+                                    required></label>
+
+                            <label>最大文字数: <input type="number" name="max_length"
+                                    value="<%= question.max_length %>"></label>
+
+                            <label>カテゴリ:
+                                <select name="category_id">
+                                    <% categories.forEach(category=> { %>
+                                        <option value="<%= category.id %>" <%=category.id===question.category_id
+                                            ? 'selected' : '' %>><%= category.name %>
+                                        </option>
+                                        <% }); %>
+                                </select>
+                            </label>
+
+                            <button type="submit">更新</button>
+                        </form>
+
+
+                        <!-- 回答フォーム -->
+                        <form action="/answers/add" method="POST">
+                            <input type="hidden" name="question_id" value="<%= question.question_id %>">
+
+                            <!-- 回答がある場合は編集、ない場合は新規追加 -->
+                            <textarea name="answer_text"
+                                onkeyup="countCharacters(this, 'counter-<%= question.question_id %>', <%= question.max_length || 0 %>)"><%= question.answer_text ? question.answer_text.trim().replace(/\r?\n/g, '') : "" %></textarea>
+
+                            <!-- 文字数カウント表示 -->
+                            <p id="counter-<%= question.question_id %>">
+                                <% if (question.max_length && question.max_length> 0) { %>
+                                    <%= question.answer_text ? question.answer_text.length : 0 %>/<%=
+                                            question.max_length %>文字
+                                            <% } else { %>
+                                                <%= question.answer_text ? question.answer_text.length : 0 %>文字
+                                                    <% } %>
+                            </p>
+
+
+                            <!-- 警告メッセージ -->
+                            <p id="warning-<%= question.question_id %>" style="color: red;"></p>
+
+                            <button type="submit">
+                                <%= question.answer_text ? "更新" : "追加" %>
+                            </button>
+                        </form>
+                </li>
+                <% }); %>
+        </ul>
+
+        <h2>新しい質問を追加</h2>
+        <form action="/questions/add" method="POST">
+            <input type="hidden" name="company_id" value="<%= company.id %>">
+
+            <label>質問内容:</label>
+            <input type="text" name="question_text" required>
+
+            <label>カテゴリ:</label>
+            <select name="category_name" id="categorySelect">
+                <% categories.forEach(category=> { %>
+                    <option value="<%= category.name %>">
+                        <%= category.name %>
+                    </option>
+                    <% }); %>
+                        <option value="">新しいカテゴリを追加</option>
+            </select>
+
+            <input type="text" name="new_category" id="newCategoryInput" placeholder="">
+
+            <label>文字数制限 (0で制限なし):</label>
+            <input type="number" name="max_length" min="0" value="0">
+
+            <button type="submit">追加</button>
+        </form>
+
+
+        <script>
+            document.getElementById('categorySelect').addEventListener('change', function () {
+                document.getElementById('newCategoryInput').disabled = !!this.value;
+            });
+
+            document.getElementById('newCategoryInput').addEventListener('input', function () {
+                document.getElementById('categorySelect').disabled = !!this.value;
+            });
+
+            function countCharacters(textarea, counterId, maxLength) {
+                let length = textarea.value.length;
+                let counterElement = document.getElementById(counterId);
+                let warningElement = document.getElementById("warning-" + counterId.split('-')[1]);
+
+                // 文字数表示を「120/200文字」形式にする
+                if (maxLength && maxLength > 0) {
+                    counterElement.innerText = `${length}/${maxLength}文字`;
+                } else {
+                    counterElement.innerText = `${length}文字（制限なし）`;
+                }
+
+                // 文字数制限を超えた場合の警告
+                if (maxLength && maxLength > 0 && length > maxLength) {
+                    warningElement.innerText = "※文字数制限を超えています";
+                    warningElement.style.color = "red";
+                } else {
+                    warningElement.innerText = "";
+                }
+            }
+
+            function toggleEditForm(questionId) {
+                console.log("toggleEditForm called for ID:", questionId); // デバッグ用ログ
+                const form = document.getElementById(`editForm-${questionId}`);
+                if (form) {
+                    form.style.display = (form.style.display === 'none' || form.style.display === '') ? 'block' : 'none';
+                } else {
+                    console.error("Form not found for ID:", questionId);
+                }
+            }
+
+        </script>
+
+        <a href="/companies">企業一覧へ戻る</a>
+</body>
+
+</html>
