@@ -132,12 +132,12 @@ app.get('/logout', (req, res) => {
 
 // 企業一覧ページ
 app.get('/companies', (req, res) => {
-  connection.query('SELECT * FROM companies WHERE user_id = ?', 
+  connection.query('SELECT * FROM companies WHERE user_id = ?',
     [req.session.userId],
     (error, results) => {
-    if (error) throw error;
-    res.render('companies.ejs', { companies: results });
-  });
+      if (error) throw error;
+      res.render('companies.ejs', { companies: results });
+    });
 });
 
 // 企業ごとの質問と回答リスト
@@ -180,7 +180,7 @@ app.get('/company/:id', (req, res) => {
       }
 
       // カテゴリ一覧を取得
-      connection.query(categoriesQuery, [req.session.userId] , (error, categoriesResults) => {
+      connection.query(categoriesQuery, [req.session.userId], (error, categoriesResults) => {
         if (error) {
           console.error(error);
           res.status(500).send("カテゴリデータ取得エラー");
@@ -198,33 +198,49 @@ app.get('/company/:id', (req, res) => {
 });
 
 app.post('/questions/add', (req, res) => {
-  const { company_id, question_text, category_name, max_length } = req.body;
+  const { company_id, question_text, category_name, new_category, max_length } = req.body;
+  const user_id = req.session.userId;
 
-  if (!company_id || !question_text || !category_name) {
+  if (!company_id || !question_text || (!category_name && !new_category)) {
     res.status(400).send("企業ID、質問内容、カテゴリ名が必要です");
     return;
   }
 
-  // `category_name` から `category_id` を取得
-  const categoryQuery = 'SELECT id FROM categories WHERE name = ?';
+  const finalCategory = new_category ? new_category : category_name;
 
-  connection.query(categoryQuery, [category_name], (error, categoryResults) => {
-    if (error) {
-      console.error(error);
-      res.status(500).send("カテゴリの取得に失敗しました");
-      return;
-    }
+  function getCategoryId(callback) {
+    // ユーザーに紐づいたカテゴリを検索
+    const categoryQuery = 'SELECT id FROM categories WHERE name = ? AND user_id = ?';
+    connection.query(categoryQuery, [finalCategory, user_id], (error, results) => {
+      if (error) {
+        console.error(error);
+        res.status(500).send("カテゴリ取得に失敗しました");
+        return;
+      }
 
-    if (categoryResults.length === 0) {
-      res.status(400).send("指定されたカテゴリが存在しません");
-      return;
-    }
+      if (results.length > 0) {
+        callback(results[0].id);
+      } else {
+        // 存在しない場合、カテゴリを追加（user_id付きで）
+        const insertCategoryQuery = 'INSERT INTO categories (name, user_id) VALUES (?, ?)';
+        connection.query(insertCategoryQuery, [finalCategory, user_id], (error, result) => {
+          if (error) {
+            console.error(error);
+            res.status(500).send("カテゴリ追加に失敗しました");
+            return;
+          }
+          callback(result.insertId);
+        });
+      }
+    });
+  }
 
-    const category_id = categoryResults[0].id;
-
-    // 質問を追加
-    const insertQuery = 'INSERT INTO questions (company_id, question_text, category_id, max_length) VALUES (?, ?, ?, ?)';
-    connection.query(insertQuery, [company_id, question_text, category_id, max_length || null], (error) => {
+  getCategoryId((category_id) => {
+    const insertQuery = `
+      INSERT INTO questions (company_id, question_text, category_id, max_length, user_id)
+      VALUES (?, ?, ?, ?, ?)
+    `;
+    connection.query(insertQuery, [company_id, question_text, category_id, max_length || null, user_id], (error) => {
       if (error) {
         console.error(error);
         res.status(500).send("質問の追加に失敗しました");
@@ -238,8 +254,9 @@ app.post('/questions/add', (req, res) => {
 
 //質問の編集
 app.post('/questions/edit/:question_id', (req, res) => {
-  const { question_text, category_id, new_category, max_length, company_id } = req.body;
+  const { question_text, category_name, new_category, max_length, company_id } = req.body;
   const { question_id } = req.params;
+  const user_id = req.session.userId;
 
   if (!question_text) {
     res.status(400).send("質問内容が必要です");
@@ -248,8 +265,8 @@ app.post('/questions/edit/:question_id', (req, res) => {
 
   if (new_category) {
     // 新しいカテゴリを作成して、そのIDを取得
-    const insertCategoryQuery = 'INSERT INTO categories (name) VALUES (?)';
-    connection.query(insertCategoryQuery, [new_category], (error, categoryResult) => {
+    const insertCategoryQuery = 'INSERT INTO categories (name, user_id) VALUES (?, ?)';
+    connection.query(insertCategoryQuery, [new_category, user_id], (error, categoryResult) => {
       if (error) {
         console.error(error);
         res.status(500).send("カテゴリの追加に失敗しました");
@@ -259,7 +276,21 @@ app.post('/questions/edit/:question_id', (req, res) => {
       updateQuestion(question_id, question_text, newCategoryId, max_length, company_id, res);
     });
   } else {
-    updateQuestion(question_id, question_text, category_id, max_length, company_id, res);
+    const categoryQuery = 'SELECT id FROM categories WHERE name = ? AND user_id = ?';
+    connection.query(categoryQuery, [category_name, user_id], (error, results) => {
+      if (error) {
+        console.error(error);
+        res.status(500).send("カテゴリの取得に失敗しました");
+        return;
+      }
+
+      if (results.length > 0) {
+        const existingCategoryId = results[0].id;
+        updateQuestion(question_id, question_text, existingCategoryId, max_length, company_id, res);
+      } else {
+        res.status(400).send("指定されたカテゴリが見つかりません");
+      }
+    });
   }
 });
 
@@ -379,17 +410,17 @@ app.post('/companies/add', (req, res) => {
     }
 
     // 新規企業を追加
-    connection.query("INSERT INTO companies (name, user_id) VALUES (?, ?)", 
-      [company_name, req.session.userId], 
+    connection.query("INSERT INTO companies (name, user_id) VALUES (?, ?)",
+      [company_name, req.session.userId],
       (err) => {
-      if (err) {
-        console.error("企業追加エラー:", err);
-        return res.status(500).send("エラーが発生しました");
-      }
+        if (err) {
+          console.error("企業追加エラー:", err);
+          return res.status(500).send("エラーが発生しました");
+        }
 
-      console.log("企業追加成功");
-      res.redirect('/companies');
-    });
+        console.log("企業追加成功");
+        res.redirect('/companies');
+      });
   });
 });
 
@@ -424,26 +455,26 @@ app.post('/companies/delete/:id', (req, res) => {
 
         //企業データを削除
         connection.query("DELETE FROM companies WHERE id = ? AND user_id = ?",
-           [companyId, req.session.userId], (err) => {
-          if (err) {
-            return connection.rollback(() => {
-              console.error("企業削除エラー:", err);
-              res.status(500).send("エラーが発生しました");
-            });
-          }
-
-          //コミットして削除を確定
-          connection.commit(err => {
+          [companyId, req.session.userId], (err) => {
             if (err) {
               return connection.rollback(() => {
-                console.error("コミットエラー:", err);
+                console.error("企業削除エラー:", err);
                 res.status(500).send("エラーが発生しました");
               });
             }
 
-            res.sendStatus(200);  // 成功レスポンス
+            //コミットして削除を確定
+            connection.commit(err => {
+              if (err) {
+                return connection.rollback(() => {
+                  console.error("コミットエラー:", err);
+                  res.status(500).send("エラーが発生しました");
+                });
+              }
+
+              res.sendStatus(200);  // 成功レスポンス
+            });
           });
-        });
       });
     });
   });

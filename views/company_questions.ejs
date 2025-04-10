@@ -20,8 +20,8 @@
                 <li>
                     <strong>
                         <%= question.question_text %>
-                    </strong> カテゴリ: <%= question.category_name %>
-                        <br>
+                    </strong> <br><br>カテゴリ: <%= question.category_name %>
+                        <br><br>
 
                         <!-- 編集・削除ボタン -->
                         <button onclick="toggleEditForm('<%= question.question_id %>')">編集</button>
@@ -38,24 +38,31 @@
                             style="display:none; margin-top:10px;">
                             <input type="hidden" name="company_id" value="<%= company.id %>">
 
-                            <label>質問内容: <input type="text" name="question_text" value="<%= question.question_text %>"
-                                    required></label>
+                            <label>質問内容: </label><br>
+                            <textarea name="question_text" required rows="4" cols="50"><%= question.question_text %></textarea>
+
+                            <label>カテゴリ:</label>
+                            <select name="category_name" id="categorySelect-<%= question.question_id %>"
+                                onchange="toggleNewCategoryInput('<%= question.question_id %>')">
+                                <% categories.forEach(category=> { %>
+                                    <option value="<%= category.name %>" <%=category.name===question.category_name
+                                        ? 'selected' : '' %>>
+                                        <%= category.name %>
+                                    </option>
+                                    <% }); %>
+                                        <option value="">新しいカテゴリを追加</option>
+                            </select>
+
+                            <input type="text" name="new_category" id="newCategoryInput-<%= question.question_id %>"
+                                placeholder="新しいカテゴリ名を入力" style="display: none;">
+
 
                             <label>最大文字数: <input type="number" name="max_length"
                                     value="<%= question.max_length %>"></label>
 
-                            <label>カテゴリ:
-                                <select name="category_id">
-                                    <% categories.forEach(category=> { %>
-                                        <option value="<%= category.id %>" <%=category.id===question.category_id
-                                            ? 'selected' : '' %>><%= category.name %>
-                                        </option>
-                                        <% }); %>
-                                </select>
-                            </label>
-
                             <button type="submit">更新</button>
                         </form>
+
 
 
                         <!-- 回答フォーム -->
@@ -92,11 +99,10 @@
         <form action="/questions/add" method="POST">
             <input type="hidden" name="company_id" value="<%= company.id %>">
 
-            <label>質問内容:</label>
-            <input type="text" name="question_text" required>
+            <label>質問内容:</label><br>
+            <textarea name="question_text" required rows="4" cols="50"></textarea>
 
-            <label>カテゴリ:</label>
-            <select name="category_name" id="categorySelect">
+            <select name="category_name" id="categorySelect-new" onchange="toggleNewCategoryInput('new')">
                 <% categories.forEach(category=> { %>
                     <option value="<%= category.name %>">
                         <%= category.name %>
@@ -105,7 +111,9 @@
                         <option value="">新しいカテゴリを追加</option>
             </select>
 
-            <input type="text" name="new_category" id="newCategoryInput" placeholder="">
+            <input type="text" name="new_category" id="newCategoryInput-new" placeholder="新しいカテゴリ名を入力"
+                style="display: none;">
+
 
             <label>文字数制限 (0で制限なし):</label>
             <input type="number" name="max_length" min="0" value="0">
@@ -116,11 +124,29 @@
 
         <script>
             document.getElementById('categorySelect').addEventListener('change', function () {
-                document.getElementById('newCategoryInput').disabled = !!this.value;
+                const newCategoryInput = document.getElementById('newCategoryInput');
+                if (this.value === "") {
+                    newCategoryInput.style.display = "block";
+                    newCategoryInput.disabled = false;
+                } else {
+                    newCategoryInput.style.display = "none";
+                    newCategoryInput.disabled = true;
+                }
             });
 
             document.getElementById('newCategoryInput').addEventListener('input', function () {
-                document.getElementById('categorySelect').disabled = !!this.value;
+                const categorySelect = document.getElementById('categorySelect');
+                if (this.value.trim() !== "") {
+                    categorySelect.disabled = true;
+                } else {
+                    categorySelect.disabled = false;
+                }
+            });
+
+            // フォーム送信前に disabled を解除（値を確実に送信）
+            document.querySelector('form').addEventListener('submit', function () {
+                document.getElementById('categorySelect').disabled = false;
+                document.getElementById('newCategoryInput').disabled = false;
             });
 
             function countCharacters(textarea, counterId, maxLength) {
@@ -128,7 +154,7 @@
                 let counterElement = document.getElementById(counterId);
                 let warningElement = document.getElementById("warning-" + counterId.split('-')[1]);
 
-                // 文字数表示を「120/200文字」形式にする
+                // 文字数表示を「/文字」形式にする
                 if (maxLength && maxLength > 0) {
                     counterElement.innerText = `${length}/${maxLength}文字`;
                 } else {
@@ -153,6 +179,48 @@
                     console.error("Form not found for ID:", questionId);
                 }
             }
+
+            // 特定のカテゴリセレクトに対応する input を切り替える
+            function toggleNewCategoryInput(idSuffix) {
+                const categorySelect = document.getElementById(`categorySelect-${idSuffix}`);
+                const newCategoryInput = document.getElementById(`newCategoryInput-${idSuffix}`);
+
+                if (!categorySelect || !newCategoryInput) return;
+
+                if (categorySelect.value === "") {
+                    newCategoryInput.style.display = "block";
+                    newCategoryInput.disabled = false;
+                } else {
+                    newCategoryInput.style.display = "none";
+                    newCategoryInput.disabled = true;
+                }
+            }
+
+            // 追加フォームの入力制御（inputに入力あればselectを無効化）
+            window.onload = function () {
+                const allInputs = document.querySelectorAll('[id^="newCategoryInput-"]');
+                allInputs.forEach(input => {
+                    const idSuffix = input.id.split('-')[1];
+                    input.addEventListener('input', function () {
+                        const categorySelect = document.getElementById(`categorySelect-${idSuffix}`);
+                        if (this.value.trim() !== "") {
+                            categorySelect.disabled = true;
+                        } else {
+                            categorySelect.disabled = false;
+                        }
+                    });
+                });
+
+                // submit時に全てのselectとinputを有効化
+                document.querySelectorAll('form').forEach(form => {
+                    form.addEventListener('submit', function () {
+                        const selects = form.querySelectorAll('select');
+                        const inputs = form.querySelectorAll('input');
+                        selects.forEach(s => s.disabled = false);
+                        inputs.forEach(i => i.disabled = false);
+                    });
+                });
+            };
 
         </script>
 
