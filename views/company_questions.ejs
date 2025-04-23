@@ -39,7 +39,8 @@
                             <input type="hidden" name="company_id" value="<%= company.id %>">
 
                             <label>質問内容: </label><br>
-                            <textarea name="question_text" required rows="4" cols="50"><%= question.question_text %></textarea>
+                            <textarea name="question_text" required rows="4"
+                                cols="50"><%= question.question_text %></textarea>
 
                             <label>カテゴリ:</label>
                             <select name="category_name" id="categorySelect-<%= question.question_id %>"
@@ -71,7 +72,7 @@
 
                             <!-- 回答がある場合は編集、ない場合は新規追加 -->
                             <textarea name="answer_text"
-                                onkeyup="countCharacters(this, 'counter-<%= question.question_id %>', <%= question.max_length || 0 %>)"><%= question.answer_text ? question.answer_text.trim().replace(/\r?\n/g, '') : "" %></textarea>
+                                onkeyup="countCharacters(this, 'counter-<%= question.question_id %>', <%= question.max_length || 0 %>)"><%= question.answer_text && question.answer_text.trim() ? question.answer_text : "" %></textarea>
 
                             <!-- 文字数カウント表示 -->
                             <p id="counter-<%= question.question_id %>">
@@ -110,7 +111,7 @@
                     <% }); %>
                         <option value="">新しいカテゴリを追加</option>
             </select>
-
+            
             <input type="text" name="new_category" id="newCategoryInput-new" placeholder="新しいカテゴリ名を入力"
                 style="display: none;">
 

@@ -1,6 +1,6 @@
-
 <!DOCTYPE html>
 <html>
+
 <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -8,28 +8,89 @@
     <link rel="stylesheet" href="/css/style.css">
     <script src="/send_url.js"></script>
 </head>
+
 <body>
     <%- include('header'); %>
-    <h1>登録企業一覧</h1>
-    
-    <% if (companies.length > 0) { %>
-        <ul>
-            <% companies.forEach(company => { %>
-                <li>
-                    <a href="/company/<%= company.id %>"><%= company.name %></a>
-                    <!-- 企業削除ボタン -->
-                    <button onclick="confirmDelete('<%= company.id %>', '<%= company.name %>')">削除</button>
-                </li>
-            <% }); %>
-        </ul>
-    <% } else { %>
-        <p>登録されている企業はありません。</p>
-    <% } %>
-    
-    <form action="/companies/add" method="POST">
-        <input type="text" name="company_name" placeholder="企業名を追加">
-        <button type="submit">追加</button>
-    </form>
+        <h1>登録企業一覧</h1>
+
+        <!-- フィルター機能 -->
+        <form method="GET" action="/companies" class="filter-form">
+            <label>業界:
+                <select name="industry">
+                    <option value="">すべて</option>
+                    <% industries.forEach(value => { %>
+                      <option value="<%= value %>" <%= selectedIndustry === value ? 'selected' : '' %>><%= value %></option>
+                    <% }) %>
+                  </select>
+            </label>
+
+            <label>選考種類:
+                <select name="selection_type">
+                    <option value="">すべて</option>
+                    <% types.forEach(value => { %>
+                      <option value="<%= value %>" <%= selectedType === value ? 'selected' : '' %>><%= value %></option>
+                    <% }) %>
+                  </select>
+            </label>
+
+            <label>選考ステータス:
+                <select name="status">
+                    <option value="">すべて</option>
+                    <% statuses.forEach(value => { %>
+                      <option value="<%= value %>" <%= selectedStatus === value ? 'selected' : '' %>><%= value %></option>
+                    <% }) %>
+                  </select>
+            </label>
+
+            <button type="submit">絞り込む</button>
+        </form>
+
+        <% if (companies.length> 0) { %>
+            <ul>
+                <% companies.forEach(company=> { %>
+                    <li>
+                        <!-- 表示モード -->
+                        <div id="display-<%= company.id %>">
+                            <a href="/company/<%= company.id %>">
+                                <%= company.name %>
+                            </a><br>
+                            業界: <%= company.industry || '未入力' %><br>
+                                選考種類: <%= company.selection_type || '未入力' %><br>
+                                    合否ステータス: <%= company.status || '未入力' %><br>
+
+                                        <!-- 編集・削除 -->
+                                        <button onclick="toggleEditForm(<%= company.id %>)">編集</button>
+                                        <button
+                                            onclick="confirmDelete('<%= company.id %>', '<%= company.name %>')">削除</button>
+                        </div>
+
+                        <!-- 編集モード -->
+                        <form id="editForm-<%= company.id %>" action="/companies/edit/<%= company.id %>" method="POST"
+                            style="display: none; margin-top: 10px;">
+                            <label>会社名: <input type="text" name="name" value="<%= company.name %>" required></label><br>
+                            <label>業界: <input type="text" name="industry" value="<%= company.industry %>"></label><br>
+                            <label>選考種類: <input type="text" name="selection_type"
+                                    value="<%= company.selection_type %>"></label><br>
+                            <label>合否ステータス: <input type="text" name="status" value="<%= company.status %>"></label><br>
+                            <button type="submit">保存</button>
+                            <button type="button" onclick="toggleEditForm(<%= company.id %>)">キャンセル</button>
+                        </form>
+                    </li>
+                    <% }); %>
+            </ul>
+            <% } else { %>
+                <p>登録されている企業はありません。</p>
+                <% } %>
+
+                    <br><br>
+                    <h2>新しい企業を追加</h2>
+                    <form action="/companies/add" method="POST">
+                        <label>企業名: <input type="text" name="company_name" required></label><br>
+                        <label>業界: <input type="text" name="industry"></label><br>
+                        <label>選考種類: <input type="text" name="selection_type"></label><br>
+                        <label>合否ステータス: <input type="text" name="status"></label><br>
+                        <button type="submit">追加</button>
+                    </form>
 </body>
 
 <script>
@@ -51,6 +112,16 @@
             });
         }
     }
-    </script>
-    
+
+    function toggleEditForm(companyId) {
+        const display = document.getElementById(`display-${companyId}`);
+        const form = document.getElementById(`editForm-${companyId}`);
+        if (display && form) {
+            const isHidden = form.style.display === 'none';
+            form.style.display = isHidden ? 'block' : 'none';
+            display.style.display = isHidden ? 'none' : 'block';
+        }
+    }
+</script>
+
 </html>

@@ -130,15 +130,199 @@ app.get('/logout', (req, res) => {
   });
 });
 
-// 企業一覧ページ
+
 app.get('/companies', (req, res) => {
-  connection.query('SELECT * FROM companies WHERE user_id = ?',
-    [req.session.userId],
-    (error, results) => {
-      if (error) throw error;
-      res.render('companies.ejs', { companies: results });
+  const userId = req.session.userId;
+
+  // クエリパラメータ取得
+  const { industry, selection_type, status } = req.query;
+
+  // ベースSQLとパラメータ配列
+  let sqlCompany = "SELECT * FROM companies WHERE user_id = ?";
+  const params = [userId];
+
+  // 条件があれば追加
+  if (industry && industry.trim() !== '') {
+    sqlCompany += " AND industry = ?";
+    params.push(industry.trim());
+  }
+  if (selection_type && selection_type.trim() !== '') {
+    sqlCompany += " AND selection_type = ?";
+    params.push(selection_type.trim());
+  }
+  if (status && status.trim() !== '') {
+    sqlCompany += " AND status = ?";
+    params.push(status.trim());
+  }
+
+  // 企業データと選択肢候補を同時に取得
+  connection.query(sqlCompany, params, (err, companies) => {
+    if (err) return res.status(500).send("企業取得エラー");
+
+    // フィルター項目の候補は user_id だけで取得
+    const sqlIndustry = "SELECT DISTINCT industry FROM companies WHERE user_id = ?";
+    const sqlType = "SELECT DISTINCT selection_type FROM companies WHERE user_id = ?";
+    const sqlStatus = "SELECT DISTINCT status FROM companies WHERE user_id = ?";
+
+    connection.query(sqlIndustry, [userId], (err, industries) => {
+      if (err) return res.status(500).send("業界取得エラー");
+
+      connection.query(sqlType, [userId], (err, types) => {
+        if (err) return res.status(500).send("選考種別取得エラー");
+
+        connection.query(sqlStatus, [userId], (err, statuses) => {
+          if (err) return res.status(500).send("ステータス取得エラー");
+
+          res.render("companies", {
+            companies,
+            industries: industries
+              .map(row => row.industry)
+              .filter(i => i && i.trim() !== ''), // 空の選択肢を除外
+            types: types
+              .map(row => row.selection_type)
+              .filter(t => t && t.trim() !== ''),
+            statuses: statuses
+              .map(row => row.status)
+              .filter(s => s && s.trim() !== ''),
+            selectedIndustry: industry || '',
+            selectedType: selection_type || '',
+            selectedStatus: status || '',
+          });
+        });
+      });
     });
+  });
 });
+
+
+
+// 企業追加
+app.post('/companies/add', (req, res) => {
+  const { company_name, industry, selection_type, status } = req.body;
+  const userId = req.session.userId;
+
+  const trimmedIndustry = industry.trim();
+  const trimmedSelectionType = selection_type.trim();
+  const trimmedStatus = status.trim();
+
+  // 企業名の重複チェック
+  connection.query("SELECT * FROM companies WHERE name = ?", [company_name], (err, results) => {
+    if (err) {
+      console.error("企業検索エラー:", err);
+      return res.status(500).send("エラーが発生しました");
+    }
+
+    if (results.length > 0) {
+      return res.status(400).send("この企業はすでに登録されています。");
+    }
+
+    // INSERTの準備（空白のみだった場合はNULLにする）
+    const query = `
+      INSERT INTO companies (name, industry, selection_type, status, user_id)
+      VALUES (?, ?, ?, ?, ?)
+    `;
+    const values = [
+      company_name,
+      trimmedIndustry || null,
+      trimmedSelectionType || null,
+      trimmedStatus || null,
+      req.session.userId
+    ];
+
+    connection.query(query, values, (err) => {
+      if (err) {
+        console.error("企業追加エラー:", err);
+        return res.status(500).send("エラーが発生しました");
+      }
+
+      console.log("企業追加成功");
+      res.redirect('/companies');
+    });
+  });
+});
+
+
+
+//企業編集
+app.post('/companies/edit/:id', (req, res) => {
+  const companyId = req.params.id;
+  const { name, industry, selection_type, status } = req.body;
+
+  const updateQuery = `
+    UPDATE companies
+    SET name = ?, industry = ?, selection_type = ?, status = ?
+    WHERE id = ?
+  `;
+
+  connection.query(updateQuery, [name, industry, selection_type, status, companyId], (err, result) => {
+    if (err) {
+      console.error('企業情報の更新に失敗:', err);
+      return res.status(500).send('サーバーエラーが発生しました');
+    }
+    res.redirect('/companies'); // 編集完了後に一覧へリダイレクト
+  });
+});
+
+//企業データの削除（関連データ含めて）
+app.post('/companies/delete/:id', (req, res) => {
+  const companyId = req.params.id;
+
+  connection.beginTransaction(err => {
+    if (err) {
+      console.error("トランザクション開始エラー:", err);
+      return res.status(500).send("削除処理の開始に失敗しました");
+    }
+
+    // 1. 回答削除（その企業の質問に紐づく）
+    const deleteAnswers = `
+      DELETE FROM answers
+      WHERE question_id IN (SELECT id FROM questions WHERE company_id = ?)
+    `;
+    connection.query(deleteAnswers, [companyId], (err) => {
+      if (err) {
+        return connection.rollback(() => {
+          console.error("回答削除エラー:", err);
+          res.status(500).send("回答データの削除に失敗しました");
+        });
+      }
+
+      // 2. 質問削除
+      connection.query("DELETE FROM questions WHERE company_id = ?", [companyId], (err) => {
+        if (err) {
+          return connection.rollback(() => {
+            console.error("質問削除エラー:", err);
+            res.status(500).send("質問データの削除に失敗しました");
+          });
+        }
+
+        // 3. 企業削除（user_id も確認）
+        connection.query("DELETE FROM companies WHERE id = ? AND user_id = ?", [companyId, req.session.userId], (err) => {
+          if (err) {
+            return connection.rollback(() => {
+              console.error("企業削除エラー:", err);
+              res.status(500).send("企業データの削除に失敗しました");
+            });
+          }
+
+          // 4. コミットして確定
+          connection.commit(err => {
+            if (err) {
+              return connection.rollback(() => {
+                console.error("コミットエラー:", err);
+                res.status(500).send("削除の確定に失敗しました");
+              });
+            }
+
+            console.log("企業データ削除完了（関連データ含む）");
+            res.sendStatus(200);
+          });
+        });
+      });
+    });
+  });
+});
+
+
 
 // 企業ごとの質問と回答リスト
 app.get('/company/:id', (req, res) => {
@@ -197,6 +381,7 @@ app.get('/company/:id', (req, res) => {
   });
 });
 
+//質問追加
 app.post('/questions/add', (req, res) => {
   const { company_id, question_text, category_name, new_category, max_length } = req.body;
   const user_id = req.session.userId;
@@ -325,6 +510,7 @@ app.post('/questions/delete/:question_id', (req, res) => {
 //回答を追加、更新する処理
 app.post('/answers/add', (req, res) => {
   const { question_id, answer_text } = req.body;
+  const user_id = req.session.userId;
 
   if (!question_id || !answer_text) {
     res.status(400).send("質問IDと回答内容が必要です");
@@ -367,9 +553,9 @@ app.post('/answers/add', (req, res) => {
         });
       } else {
         // **4. 新しい回答を追加**
-        const insertQuery = 'INSERT INTO answers (question_id, answer_text, created_at) VALUES (?, ?, NOW())';
+        const insertQuery = 'INSERT INTO answers (question_id, answer_text, created_at, user_id) VALUES (?, ?, NOW(), ?)';
 
-        connection.query(insertQuery, [question_id, answer_text], (error) => {
+        connection.query(insertQuery, [question_id, answer_text, req.session.userId], (error) => {
           if (error) {
             console.error(error);
             res.status(500).send("回答の追加に失敗しました");
@@ -395,90 +581,6 @@ app.get('/category/:id', (req, res) => {
   );
 });
 
-app.post('/companies/add', (req, res) => {
-  const { company_name } = req.body;
-
-  // 企業名がすでに登録されているかチェック
-  connection.query("SELECT * FROM companies WHERE name = ?", [company_name], (err, results) => {
-    if (err) {
-      console.error("企業検索エラー:", err);
-      return res.status(500).send("エラーが発生しました");
-    }
-
-    if (results.length > 0) {
-      return res.status(400).send("この企業はすでに登録されています。");
-    }
-
-    // 新規企業を追加
-    connection.query("INSERT INTO companies (name, user_id) VALUES (?, ?)",
-      [company_name, req.session.userId],
-      (err) => {
-        if (err) {
-          console.error("企業追加エラー:", err);
-          return res.status(500).send("エラーが発生しました");
-        }
-
-        console.log("企業追加成功");
-        res.redirect('/companies');
-      });
-  });
-});
-
-//企業データの削除
-app.post('/companies/delete/:id', (req, res) => {
-  const companyId = req.params.id;
-
-  // データ削除時の依存関係を考慮し、トランザクションを利用
-  connection.beginTransaction(err => {
-    if (err) {
-      console.error("トランザクション開始エラー:", err);
-      return res.status(500).send("エラーが発生しました");
-    }
-
-    //企業に紐づく回答データを削除
-    connection.query("DELETE FROM answers WHERE question_id IN (SELECT id FROM questions WHERE company_id = ?)", [companyId], (err) => {
-      if (err) {
-        return connection.rollback(() => {
-          console.error("回答削除エラー")
-          res.status(500).send("エラーが発生しました");
-        });
-      }
-
-      //企業に紐づく質問データを削除
-      connection.query("DELETE FROM questions WHERE company_id = ?", [companyId], (err) => {
-        if (err) {
-          return connection.rollback(() => {
-            console.error("質問削除エラー:", err);
-            res.status(500).send("エラーが発生しました");
-          });
-        }
-
-        //企業データを削除
-        connection.query("DELETE FROM companies WHERE id = ? AND user_id = ?",
-          [companyId, req.session.userId], (err) => {
-            if (err) {
-              return connection.rollback(() => {
-                console.error("企業削除エラー:", err);
-                res.status(500).send("エラーが発生しました");
-              });
-            }
-
-            //コミットして削除を確定
-            connection.commit(err => {
-              if (err) {
-                return connection.rollback(() => {
-                  console.error("コミットエラー:", err);
-                  res.status(500).send("エラーが発生しました");
-                });
-              }
-
-              res.sendStatus(200);  // 成功レスポンス
-            });
-          });
-      });
-    });
-  });
-});
 
 // サーバー起動
 app.listen(3000, () => {

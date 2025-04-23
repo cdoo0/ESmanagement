@@ -112,6 +112,19 @@ textarea {
   height:100px;
   }
 
+  .filter-form {
+    margin-bottom: 1.5rem;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px; /* 項目の間にスペースを作る */
+  }
+  
+  .filter-form select,
+  .filter-form button {
+    padding: 6px 10px;
+    font-size: 14px;
+  }
+  
 /* トップページ */
 .top {
   display: flex;
